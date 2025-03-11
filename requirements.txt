@@ -1,0 +1,4 @@
+requests
+websockets
+colorama
+tabulate
