@@ -99,6 +99,10 @@ class SortMeAPI:
                 else:
                     yield json.loads(message)
 
+    def get_contest_history(self) -> list:
+        raw = self._make_request('GET', 'getHistoryOfContests').json()['contests']
+        return raw
+
     def get_submission_history(self, contest_id: int, task_id: int, limit = 0) -> tuple[int, list[ShortSubmission | ShortSubmissionBase]]:
         r = self._make_request('GET', 'getMySubmissionsByTask', params={'id': task_id, 'contestid': contest_id}).json()
         submissions: list[ShortSubmission | ShortSubmissionBase] = r['submissions']
