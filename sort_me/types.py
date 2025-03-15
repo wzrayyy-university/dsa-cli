@@ -140,4 +140,4 @@ class ContestInfoNew:
 class Config:
     api_key: str
     naming_convention: str
-    phone_number: str
+    phone: str
