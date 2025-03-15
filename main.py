@@ -2,6 +2,7 @@ import argparse # TODO: replace with https://github.com/swansonk14/typed-argumen
 import functools
 import json
 import os
+from os.path import isfile
 import pathlib
 import subprocess
 import sys
@@ -208,10 +209,13 @@ class ApiWorker():
             print("Authorization:")
             config = {}
             config["phone"] = input("Phone: ")
-            nc_tmp_ = input("Naming convention [(\\w).cpp]: ")
-            config["naming_convention"] = nc_tmp_ if nc_tmp_ else "(\\w).cpp"
+            # i'm sure people won't get this and break their installs
+            # nc_tmp_ = input("Naming convention [(\\w).cpp]: ")
+            # config["naming_convention"] = nc_tmp_ if nc_tmp_ else "(\\w).cpp"
+            config["naming_convention"] = "(\\w).cpp"
 
             self._auth_provider = AuthProvider(config["phone"])
+            print("You have to approve the login request in Telegram")
             config["api_key"] = self._auth_provider.auth()
 
             with open(filepath, "w") as config_file:
@@ -244,7 +248,12 @@ class ApiWorker():
             with open(".sortme.json") as datafile:
                 data = json.load(datafile)
 
-            filename = args.filename if '.cpp' in args.filename else args.filename.upper() + '.cpp'
+            if '.cpp' in args.filename:
+                filename = args.filename
+            else:
+                filename = args.filename.upper() + '.cpp'
+                if not os.path.isfile(filename):
+                    filename = filename.lower()
 
             if not os.path.isfile(filename):
                 print(f"Error! {filename} doesn't exist!", file=sys.stderr)
@@ -259,7 +268,7 @@ class ApiWorker():
                 else:
                     task_id = data['tasks'][ord(args.task_id.upper()) - ord('A')]
             else:
-                task_id = data['tasks'][ord(pathlib.Path(filename).stem) - ord('A')]
+                task_id = data['tasks'][ord(pathlib.Path(filename).stem.upper()) - ord('A')]
 
             try:
                 id = self._api.upload_code(code, data['contest_id'], task_id)
@@ -302,7 +311,12 @@ class ApiWorker():
         with open(".sortme.json") as datafile:
             data = json.load(datafile)
 
-        filename = args.filename if '.cpp' in args.filename else args.filename.upper() + '.cpp'
+        if '.cpp' in args.filename:
+            filename = args.filename
+        else:
+            filename = args.filename.upper() + '.cpp'
+            if not os.path.isfile(filename):
+                filename = filename.lower()
 
         if not os.path.isfile(filename):
             print(f"Error! {filename} doesn't exist!", file=sys.stderr)
@@ -314,15 +328,15 @@ class ApiWorker():
             else:
                 task_id = ord(args.task_id.upper()) - ord('A')
         else:
-            task_id = ord(pathlib.Path(filename).stem) - ord('A')
+            task_id = ord(pathlib.Path(filename).stem.upper()) - ord('A')
 
-        subprocess.run(f'g++ -fsanitize=leak -fsanitize=address -fsanitize=undefined -DDEBUG -g {filename} -o .a.out'.split())
+        subprocess.run(f'g++ -std=c++20 {filename} -o .a.out'.split())
 
         for idx, test in enumerate(data['tests'][task_id]):
             with open('.test', 'w') as test_file:
                 test_file.write(test['stdin'])
 
-            pr = subprocess.Popen(['bash','-c','(./.a.out < .test)'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+            pr = subprocess.Popen(['./.a.out'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
             if pr.stdin == None:
                 return
 
@@ -506,38 +520,38 @@ def main():
     # fetch_parser.add_argument('task_number')
     # fetch_parser.set_defaults(callback=api.show)
 
-    fetch_parser = subparsers.add_parser('init')
-    fetch_parser.add_argument('contest_id', type=int)
+    fetch_parser = subparsers.add_parser('init', help='Initialize the folder')
+    fetch_parser.add_argument('contest_id', type=int, help='Contst id taken from the URL')
     fetch_parser.set_defaults(callback=api.init)
 
-    push_parser = subparsers.add_parser('push')
-    push_parser.add_argument('filename')
-    push_parser.add_argument('-t', '--task-id')
+    push_parser = subparsers.add_parser('push', help='Push your solution to Sort-Me')
+    push_parser.add_argument('filename', help='Filename or task id to push')
+    push_parser.add_argument('-t', '--task-id', help='Optionally specify task id')
     push_parser.set_defaults(callback=api.push)
 
-    push_parser = subparsers.add_parser('test')
-    push_parser.add_argument('filename')
-    push_parser.add_argument('-t', '--task-id')
+    push_parser = subparsers.add_parser('test', help='Test your solution with given tests')
+    push_parser.add_argument('filename', help='Filename or task id to test')
+    push_parser.add_argument('-t', '--task-id', help='Optionally specify task id')
     push_parser.set_defaults(callback=api.test)
 
-    submission_parser = subparsers.add_parser('submissions', aliases=['sub'])
-    submission_parser.add_argument('task_id')
+    submission_parser = subparsers.add_parser('submissions', aliases=['sub'], help='List your submissions')
+    submission_parser.add_argument('task_id', help='Task to list the submissions for')
     submission_parser.add_argument('--limit', type=int)
     submission_parser.set_defaults(callback=api.submissions)
 
-    contest_parser = subparsers.add_parser('contest', aliases=['ct'])
+    contest_parser = subparsers.add_parser('contest', aliases=['ct'], help='List contest info and your position in the raiting')
     contest_parser.set_defaults(callback=api.contest)
 
-    stat_parser = subparsers.add_parser('stat', aliases=['st'])
+    stat_parser = subparsers.add_parser('stat', aliases=['st'], help='Show how many people have solved each task in the contest')
     stat_parser.set_defaults(callback=api.stats)
 
-    code_parser = subparsers.add_parser('code')
-    code_parser.add_argument('task_id')
-    code_parser.add_argument('submission_id', type=int, nargs='?')
+    code_parser = subparsers.add_parser('code', help='Pull your latest successful submission from Sort-Me')
+    code_parser.add_argument('task_id', help='Task to pull the submission for')
+    code_parser.add_argument('submission_id', type=int, nargs='?', help='Optionally specify which submission to pull (1-based)')
     code_parser.set_defaults(callback=api.code)
 
-    info_parser = subparsers.add_parser('info', aliases=['i'])
-    info_parser.add_argument('task_id')
+    info_parser = subparsers.add_parser('info', aliases=['i'], help='Print the problem description')
+    info_parser.add_argument('task_id', help='Task to print')
     info_parser.set_defaults(callback=api.info)
 
     args = parser.parse_args()

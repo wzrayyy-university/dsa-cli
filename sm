@@ -1,0 +1,6 @@
+#!/bin/sh
+VENV_NAME=".venv"
+
+# NOTE: symlink this file somewhere in $PATH
+BASEDIR="$(dirname "$(readlink -e "$0")")"
+exec "$BASEDIR/$VENV_NAME/bin/python3" "$BASEDIR/main.py" "$@"

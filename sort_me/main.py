@@ -149,13 +149,13 @@ class SortMeAPI:
             'tasks': [task['name'] for task in r['tasks']],
         }
 
-        # r = self._make_request('GET', 'getContestTable', params={'contestid': contest_id, 'page': 1, 'label': 0}).json()['you']
-        # out.update({
-        #     'place': r['place'],
-        #     'results': r['results'],
-        #     'sum': r['sum'],
-        #     'time': r['time']
-        # })
+        r = self._make_request('GET', 'getContestTable', params={'contestid': contest_id, 'page': 1, 'label': 0}).json()['you']
+        out.update({
+            'place': r['place'],
+            'results': r['results'],
+            'sum': r['sum'],
+            'time': r['time']
+        })
 
         return out
 
