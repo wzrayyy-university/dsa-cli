@@ -136,6 +136,11 @@ class SortMeAPI:
                 if 'total_points' in submission and submission['total_points'] == 100:
                     id = submission['id']
                     break
+            if id == -1:
+                id = submissions[0]['id']
+
+        if id == -1:
+            raise RuntimeError("No suitable submission ID found!")
 
         r = self._make_request('GET', 'getSubmissionInfo', params={'id': id}).json()
         return r

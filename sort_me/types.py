@@ -141,3 +141,4 @@ class Config:
     api_key: str
     naming_convention: str
     phone: str
+    template_path: str | None = None

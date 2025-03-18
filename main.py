@@ -9,7 +9,7 @@ import sys
 import time
 
 from datetime import datetime
-from typing import Union
+from typing import Union, cast
 
 import colorama
 from tabulate import tabulate
@@ -204,7 +204,12 @@ class ApiWorker():
     _api: SortMeAPI
 
     def __init__(self):
-        filepath = os.environ['HOME'] + "/.sortme_config.json"
+        data_path = os.environ.get('XDG_DATA_HOME') or os.environ['HOME'] + "/.local/share"
+        filepath = data_path + "/sortme_config.json"
+
+        if not os.path.isdir(data_path):
+            os.makedirs(data_path, exist_ok=True)
+
         if not os.path.isfile(filepath):
             print("Authorization:")
             config = {}
@@ -218,6 +223,14 @@ class ApiWorker():
             print("You have to approve the login request in Telegram")
             config["api_key"] = self._auth_provider.auth()
 
+            template_path = input('Full path to your template (used in "sm create", can be ommited): ')
+            while template_path and not os.path.isfile(template_path):
+                print("File not found!")
+                template_path = input('Full path to your template (used in "sm create", can be ommited): ')
+
+            if template_path:
+                config['template_path'] = template_path
+
             with open(filepath, "w") as config_file:
                 json.dump(config, config_file)
 
@@ -229,7 +242,7 @@ class ApiWorker():
         self._api = SortMeAPI(self._config.api_key)
 
     def reauth(self):
-        filepath = os.environ['HOME'] + "/.sortme_config.json"
+        filepath = os.environ['HOME'] + "/sortme_config.json"
         with open(filepath) as config_file:
             cfg = json.load(config_file)
 
@@ -242,7 +255,7 @@ class ApiWorker():
     def push(self, args: argparse.Namespace):
         while True:
             if not os.path.isfile('./.sortme.json'):
-                print('Error! No .sortme.json found in current directory! Run algo init to create it!', file=sys.stderr)
+                print('Error! ".sortme.json" is missing! Run "sm init" to create it!', file=sys.stderr)
                 exit(1)
 
             with open(".sortme.json") as datafile:
@@ -298,14 +311,14 @@ class ApiWorker():
         }
 
         with open('.sortme.json', 'w') as file:
-            json.dump(data, file)
+            json.dump(data, file, indent=4)
 
     def test(self, args):
         dim = lambda x: f'{colorama.Style.DIM}{x}{colorama.Style.NORMAL}'
         bright = lambda x: f'{colorama.Style.BRIGHT}{x}{colorama.Style.NORMAL}'
 
         if not os.path.isfile('./.sortme.json'):
-            print('Error! No .sortme.json found in current directory! Run algo init to create it!', file=sys.stderr)
+            print('Error! ".sortme.json" is missing! Run "sm init" to create it!', file=sys.stderr)
             exit(1)
 
         with open(".sortme.json") as datafile:
@@ -330,40 +343,54 @@ class ApiWorker():
         else:
             task_id = ord(pathlib.Path(filename).stem.upper()) - ord('A')
 
-        subprocess.run(f'g++ -std=c++20 {filename} -o .a.out'.split())
+        tests = data['tests'][task_id]
+
+        test_filename = chr(task_id + ord('A')) + '.t'
+        if not os.path.isfile(test_filename):
+            test_filename = chr(task_id + ord('a')) + '.t'
+        if not os.path.isfile(test_filename):
+            test_filename = chr(task_id + ord('A')) + '.test'
+        if not os.path.isfile(test_filename):
+            test_filename = chr(task_id + ord('a')) + '.test'
+        if not os.path.isfile(test_filename):
+            test_filename = None
+
+        if test_filename:
+            with open(test_filename) as f:
+                test_data = f.read().strip().split('\n\n\n')
+            for test in test_data:
+                t = test.split("\n\n")
+                tests.append({'stdin': t[0].strip(), 'stdout': t[1].strip()})
+
+        comp = subprocess.run(f'g++ -std=c++20 {filename} -o .a.out'.split())
+
+        if comp.returncode:
+            return
 
         for idx, test in enumerate(data['tests'][task_id]):
-            with open('.test', 'w') as test_file:
-                test_file.write(test['stdin'])
-
             pr = subprocess.Popen(['./.a.out'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-            if pr.stdin == None:
-                return
-
-            output = pr.communicate(test['stdin'].encode('utf-8'))[0].decode('utf-8').strip()
             print(f'Тест {idx+1}: ', end='')
+            output = pr.communicate(test['stdin'].encode('utf-8'))[0].decode('utf-8').strip()
             fail = True
-            if test['stdout'] == output:
+            if test['stdout'].strip() == output:
                 print(f'{colorama.Fore.GREEN}PASS{colorama.Style.RESET_ALL}')
                 fail = False
             else:
                 print(f'{colorama.Fore.RED}FAIL{colorama.Style.RESET_ALL}')
                 print(bright('Входные данные:'), end='')
-                printn(test['stdin'])
+                printn(test['stdin'].strip())
                 print(bright( 'Вывод:' ), end='')
                 printn(output)
                 print(bright( 'Ожидаемый вывод:' ), end='')
-                printn(test['stdout'])
+                printn(test['stdout'].strip())
             if idx+1 != len(data['tests'][task_id]) and fail:
                 print()
 
-
-        os.remove('.test')
         os.remove('.a.out')
 
     def submissions(self, args):
         if not os.path.isfile('./.sortme.json'):
-            print('Error! No .sortme.json found in current directory! Run algo init to create it!', file=sys.stderr)
+            print('Error! ".sortme.json" is missing! Run "sm init" to create it!', file=sys.stderr)
             exit(1)
 
         with open(".sortme.json") as datafile:
@@ -385,7 +412,7 @@ class ApiWorker():
 
     def contest(self, _):
         if not os.path.isfile('./.sortme.json'):
-            print('Error! No .sortme.json found in current directory! Run algo init to create it!', file=sys.stderr)
+            print('Error! ".sortme.json" is missing! Run "sm init" to create it!', file=sys.stderr)
             exit(1)
 
         with open(".sortme.json") as datafile:
@@ -438,7 +465,7 @@ class ApiWorker():
 
     def code(self, args):
         if not os.path.isfile('./.sortme.json'):
-            print('Error! No .sortme.json found in current directory! Run algo init to create it!', file=sys.stderr)
+            print('Error! ".sortme.json" is missing! Run "sm init" to create it!', file=sys.stderr)
             exit(1)
 
         with open(".sortme.json") as datafile:
@@ -462,7 +489,7 @@ class ApiWorker():
 
     def info(self, args):
         if not os.path.isfile('./.sortme.json'):
-            print('Error! No .sortme.json found in current directory! Run algo init to create it!', file=sys.stderr)
+            print('Error! ".sortme.json" is missing! Run "sm init" to create it!', file=sys.stderr)
             exit(1)
 
         with open(".sortme.json") as datafile:
@@ -490,7 +517,7 @@ class ApiWorker():
                         swaps += 1
 
         if not os.path.isfile('./.sortme.json'):
-            print('Error! No .sortme.json found in current directory! Run algo init to create it!', file=sys.stderr)
+            print('Error! ".sortme.json" is missing! Run "sm init" to create it!', file=sys.stderr)
             exit(1)
 
         with open(".sortme.json") as datafile:
@@ -508,6 +535,26 @@ class ApiWorker():
             print(f"{dim(task_pretty_idx)}. {task.name}: {bright(task.solved_by)}")
 
 
+    def create(self, args):
+        if not self._config.template_path and not args.template_path:
+            print("Error! Template path missing!", file=sys.stderr)
+        filename = args.task_id + '.cpp'
+        template_path = cast(str, args.template_path) or cast(str, self._config.template_path)
+
+        if (os.path.isfile(filename)):
+            print("Error! File already exists!", file=sys.stderr)
+            exit(1)
+
+        if not os.path.isfile(template_path):
+            print(f"Error! File {template_path} not found!", file=sys.stderr)
+            exit(1)
+
+        with open(template_path) as f:
+            template = f.read()
+
+        with open(filename, 'w') as f:
+            f.write(template)
+
 
 def main():
     api = ApiWorker()
@@ -524,12 +571,12 @@ def main():
     fetch_parser.add_argument('contest_id', type=int, help='Contst id taken from the URL')
     fetch_parser.set_defaults(callback=api.init)
 
-    push_parser = subparsers.add_parser('push', help='Push your solution to Sort-Me')
+    push_parser = subparsers.add_parser('push', aliases=['p'], help='Push your solution to Sort-Me')
     push_parser.add_argument('filename', help='Filename or task id to push')
     push_parser.add_argument('-t', '--task-id', help='Optionally specify task id')
     push_parser.set_defaults(callback=api.push)
 
-    push_parser = subparsers.add_parser('test', help='Test your solution with given tests')
+    push_parser = subparsers.add_parser('test', aliases=['t'], help='Test your solution with given tests')
     push_parser.add_argument('filename', help='Filename or task id to test')
     push_parser.add_argument('-t', '--task-id', help='Optionally specify task id')
     push_parser.set_defaults(callback=api.test)
@@ -553,6 +600,11 @@ def main():
     info_parser = subparsers.add_parser('info', aliases=['i'], help='Print the problem description')
     info_parser.add_argument('task_id', help='Task to print')
     info_parser.set_defaults(callback=api.info)
+
+    create_parser = subparsers.add_parser('create', aliases=['c'], help='Create a task with a predefined template')
+    create_parser.add_argument('task_id', help='Task name to create')
+    create_parser.add_argument('template_path', help='Optional path to template', nargs='?')
+    create_parser.set_defaults(callback=api.create)
 
     args = parser.parse_args()
     args.callback(args)
